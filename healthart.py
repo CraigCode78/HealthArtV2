@@ -20,7 +20,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY')
 
 # The bucket name you provided
-BUCKET_NAME = "replit-objstore-2beb1307-ac65-40cb-b566-d34e8730dad7"
+BUCKET_NAME = os.environ.get('REPLIT_OBJECT_STORE_BUCKET', 'default-bucket')
 
 # Allow OAuth over HTTP for development purposes only
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -284,8 +284,9 @@ def generate_art():
         
         # Save to Replit's Object Storage
         object_storage_client.upload_from_bytes(f"{BUCKET_NAME}/{image_filename}", image_bytes)
+        logging.debug(f"Saved image to storage: {image_filename}")
         
-        image_url = f"/static/gallery/{image_filename}"
+        image_url = url_for('serve_image', filename=image_filename, _external=True)
     except Exception as e:
         logging.error(f"Error saving image to storage: {str(e)}")
         return jsonify({"error": "Failed to save generated image"}), 500
@@ -402,21 +403,58 @@ def handle_exception(e):
 GALLERY_DIR = os.path.join(app.static_folder, 'gallery')
 os.makedirs(GALLERY_DIR, exist_ok=True)
 
-@app.route('/static/gallery/<path:filename>')
+@app.route('/serve_image/<path:filename>')
 def serve_image(filename):
     try:
+        # Prepend "default-bucket/" if it's not already there
+        if not filename.startswith("default-bucket/"):
+            filename = f"default-bucket/{filename}"
+        
         # Download the image from Replit's Object Storage
-        image_bytes = object_storage_client.download_as_bytes(f"{BUCKET_NAME}/{filename}")
+        image_bytes = object_storage_client.download_as_bytes(filename)
         
         return send_file(
             io.BytesIO(image_bytes),
             mimetype='image/png',
             as_attachment=False,
-            download_name=filename
+            download_name=filename.split('/')[-1]
         )
     except Exception as e:
         logging.error(f"Error serving image {filename}: {str(e)}")
         return "Image not found", 404
+
+@app.route('/get_gallery_images')
+def get_gallery_images():
+    try:
+        # List all objects in the default bucket
+        all_objects = list(object_storage_client.list())
+        logging.debug(f"All objects in bucket: {all_objects}")
+        
+        # Print out the type and length of all_objects
+        logging.debug(f"Type of all_objects: {type(all_objects)}")
+        logging.debug(f"Length of all_objects: {len(all_objects)}")
+        
+        # Filter for image files (assuming all are .png)
+        image_files = [obj.name for obj in all_objects if obj.name.startswith("default-bucket/health_art_") and obj.name.endswith(".png")]
+        logging.debug(f"Filtered image files: {image_files}")
+        
+        # Generate URLs for the frontend to access the images
+        image_urls = [url_for('serve_image', filename=image.split('/')[-1], _external=True) for image in image_files]
+        logging.debug(f"Image URLs: {image_urls}")
+        
+        return jsonify({"images": image_urls})
+    except Exception as e:
+        logging.error(f"Error fetching gallery images: {str(e)}")
+        return jsonify({"error": f"Failed to fetch gallery images: {str(e)}"}), 500
+
+@app.route('/list_all_objects')
+def list_all_objects():
+    try:
+        all_objects = list(object_storage_client.list())
+        return jsonify({"objects": all_objects})
+    except Exception as e:
+        logging.error(f"Error listing all objects: {str(e)}")
+        return jsonify({"error": f"Failed to list all objects: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True)

@@ -90,6 +90,7 @@
             padding: 0.5rem 1rem;
         }
     </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
     <nav class="navbar">
@@ -98,11 +99,47 @@
     </nav>
     <div class="container">
         <h1>Your Health Art Gallery</h1>
-        <div class="gallery">
-            {% for image in images %}
-                <img src="{{ image }}" alt="Health Art">
-            {% endfor %}
+        <div id="gallery-container" class="gallery">
+            <!-- Images will be loaded here -->
         </div>
     </div>
+
+    <script>
+    $(document).ready(function() {
+        function loadGallery() {
+            $.ajax({
+                url: "{{ url_for('get_gallery_images') }}",
+                type: "GET",
+                dataType: "json",
+                success: function(response) {
+                    console.log("Raw response:", response);  // Log the raw response
+                    if (response.images && response.images.length > 0) {
+                        var galleryHtml = '';
+                        response.images.forEach(function(image) {
+                            galleryHtml += '<img src="' + image + '" alt="Health Art" onerror="this.onerror=null;this.src=\'{{ url_for('static', filename='images/placeholder.png') }}\';console.log(\'Image failed to load:\', this.src);">';
+                        });
+                        $('#gallery-container').html(galleryHtml);
+                    } else {
+                        $('#gallery-container').html('<p>No images found in the gallery. Raw response: ' + JSON.stringify(response) + '</p>');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error loading gallery:", error);
+                    console.log("XHR status:", xhr.status);
+                    console.log("XHR response text:", xhr.responseText);
+                    $('#gallery-container').html('<p>Error loading gallery. Please try again later. Error details: ' + error + '</p>');
+                }
+            });
+        }
+
+        loadGallery();
+
+        // Add a refresh button
+        $('<button>')
+            .text('Refresh Gallery')
+            .click(loadGallery)
+            .insertBefore('#gallery-container');
+    });
+    </script>
 </body>
 </html>
