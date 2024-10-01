@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Latest HealthArt - HealthArt</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <!-- Favicon -->
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-papLvz3929qUwjFcw+i5ScOGSdEix4nBUgTar50oE5vAmXxE7XR1O8f0LuCr8x8ZJzRtUZyH2ZodDvInV7corQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Styles -->
+    <style>
+        /* Reset CSS */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* Typography */
+        body {
+            font-family: 'Roboto', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #fff;
+        }
+
+        h1, h2, h3 {
+            font-weight: 700;
+            color: #222;
+        }
+
+        p {
+            font-weight: 300;
+            color: #555;
+        }
+
+        /* Container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border: 8px solid #f3f3f3; /* Light grey */
+            border-top: 8px solid #007BFF; /* Blue */
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 2s linear infinite;
+            margin: 40px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Latest HealthArt Section */
+        .latest-art {
+            text-align: center;
+            margin: 60px 0;
+        }
+
+        .latest-art h2 {
+            font-size: 2em;
+            margin-bottom: 20px;
+            color: #111;
+        }
+
+        #health-art {
+            max-width: 100%;
+            height: auto;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            display: none; /* Hidden initially */
+            margin-top: 20px;
+        }
+
+        #health-art.show {
+            display: block;
+        }
+
+        /* Additional HealthArt Section */
+        .additional-art {
+            margin-top: 40px;
+        }
+
+        .additional-art img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .additional-art img:hover {
+            transform: scale(1.05);
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 40px 0;
+            background-color: #f1f1f1;
+            color: #777;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 992px) {
+            .hero {
+                flex-direction: column;
+            }
+
+            .hero-content {
+                padding-right: 0;
+                text-align: center;
+            }
+
+            .features {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .feature {
+                flex: 1 1 80%;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .hero-content h1 {
+                font-size: 2.2em;
+            }
+
+            .hero-content p {
+                font-size: 1em;
+            }
+
+            .cta-button {
+                padding: 12px 25px;
+                font-size: 0.9em;
+                width: 100%; /* Full width on small screens */
+                text-align: center;
+            }
+
+            .feature {
+                flex: 1 1 100%;
+            }
+        }
+
+        /* Styles for the recovery score badge */
+        .recovery-score {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+
+        /* Color coding based on recovery score */
+        .recovery-score.red {
+            background-color: #dc3545; /* Red for 1-33% */
+            color: white;
+        }
+
+        .recovery-score.amber {
+            background-color: #ffc107; /* Amber for 34-66% */
+            color: black;
+        }
+
+        .recovery-score.green {
+            background-color: #28a745; /* Green for 67-99% */
+            color: white;
+        }
+
+        /* Styles for the gallery link section */
+        .gallery-link-section {
+            text-align: center;
+            margin-top: 20px;
+            margin-bottom: 40px;
+        }
+
+        .gallery-link {
+            display: inline-block;
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .gallery-link:hover {
+            background-color: #2980b9;
+        }
+
+        .button-container {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .save-button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .save-button:hover {
+            background-color: #45a049;
+        }
+        .save-button:active {
+            background-color: #3e8e41;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Latest HealthArt Section -->
+        <section class="latest-art">
+            <h2>Your Latest HealthArt</h2>
+            
+            <!-- Display Recovery Score with dynamic styling based on the score -->
+            <div class="recovery-score {% if 1 <= recovery_score <= 33 %}red{% elif 34 <= recovery_score <= 66 %}amber{% elif 67 <= recovery_score <= 99 %}green{% endif %}">
+                Recovery Score: {{ recovery_score }}%
+            </div>
+            
+            <!-- Loading Spinner displayed while generating art -->
+            <div id="loader" class="spinner"></div>
+            <!-- AI Generated Image placeholder -->
+            <img id="health-art" src="" alt="Your Latest Health Art">
+            <!-- Add this button after your generated image -->
+            <div class="button-container">
+                <button id="saveButton" class="save-button">Save Image</button>
+            </div>
+        </section>
+
+        <!-- Additional HealthArt Section with a static image -->
+        <section class="additional-art">
+            <h2>Explore More Creations</h2>
+            <img src="{{ url_for('static', filename='images/healthart2.png') }}" alt="Additional Health Art">
+        </section>
+
+        <!-- Add the gallery link here -->
+        <div class="gallery-link-section">
+            <a href="{{ url_for('gallery') }}" class="gallery-link">View Your HealthArt Gallery</a>
+        </div>
+    </div>
+
+    <!-- Footer Section -->
+    <footer class="footer">
+        &copy; 2023 HealthArt. All rights reserved.
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        $(document).ready(function() {
+            /**
+             * Sends a POST request to generate AI art based on the recovery score.
+             * On success, displays the generated image and hides the loader.
+             * On failure, hides the loader and alerts the user.
+             */
+            function generateArt() {
+                $.ajax({
+                    url: "{{ url_for('generate_art') }}",
+                    type: "POST",
+                    dataType: "json",
+                    success: function(response) {
+                        if (response.image_data) {
+                            // Set the src of the image to the base64 data received
+                            $('#health-art').attr('src', 'data:image/png;base64,' + response.image_data);
+                            $('#health-art').addClass('show');  // Display the image
+                            $('#loader').hide();  // Hide the loading spinner
+                            $('#saveButton').show();  // Show the save button
+                            // Store the image data and recovery score
+                            $('#saveButton').data('imageData', response.image_data);
+                            $('#saveButton').data('recoveryScore', response.recovery_score);
+                        } else {
+                            $('#loader').hide();
+                            alert('Failed to generate art.');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $('#loader').hide();
+                        alert('An error occurred while generating art.');
+                        console.error(xhr.responseText);
+                    }
+                });
+            }
+
+            // Initiate art generation when the page loads
+            generateArt();
+
+            function saveImage() {
+                const img = document.getElementById('health-art');
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                canvas.getContext('2d').drawImage(img, 0, 0, img.width, img.height);
+                
+                const recoveryScore = $('#saveButton').data('recoveryScore');
+                console.log('Recovery Score before save:', recoveryScore); // Debug log
+                
+                canvas.toBlob(function(blob) {
+                    const formData = new FormData();
+                    formData.append('file', blob, 'generated_image.png');
+                    formData.append('recovery_score', recoveryScore);
+                    
+                    fetch('{{ url_for("save_image") }}', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Save response:', data); // Debug log
+                        if (data.message) {
+                            alert('Image saved successfully!');
+                        } else {
+                            alert('Error saving image: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('An error occurred while saving the image.');
+                    });
+                }, 'image/png');
+            }
+
+            $('#saveButton').click(function() {
+                saveImage();
+            });
+        });
+    </script>
+</body>
+</html>
