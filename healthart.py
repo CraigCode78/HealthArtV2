@@ -11,10 +11,16 @@ from datetime import datetime
 import uuid
 from werkzeug.utils import secure_filename
 import json
+import io
 from replit import db
+from replit.object_storage import Client as ObjectStorageClient
+
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY')
+
+# The bucket name you provided
+BUCKET_NAME = "replit-objstore-2beb1307-ac65-40cb-b566-d34e8730dad7"
 
 # Allow OAuth over HTTP for development purposes only
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -28,10 +34,14 @@ TOKEN_URL = 'https://api.prod.whoop.com/oauth/oauth2/token'  # WHOOP OAuth2 Toke
 API_BASE_URL = 'https://api.prod.whoop.com/developer'  # WHOOP API Base URL
 
 # Initialize OpenAI client with API key from environment variable
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 # Configure logging to display debug information
 logging.basicConfig(level=logging.DEBUG)
+
+# Initialize the Object Storage client
+object_storage_client = ObjectStorageClient()
+BUCKET_NAME = os.environ.get('REPLIT_OBJECT_STORE_BUCKET', 'default-bucket')
 
 # Remove SQLAlchemy setup and GalleryImage model
 
@@ -181,7 +191,7 @@ def generate_ai_art(recovery_score, additional_metrics=None):
 
     # Use OpenAI's DALL-E to generate the art based on the prompt
     try:
-        response = client.images.generate(
+        response = openai_client.images.generate(
             model="dall-e-3",
             prompt=final_prompt,
             n=1,
@@ -232,50 +242,58 @@ def health_art():
     # Render the health_art.html template with the recovery score
     return render_template('health_art.html', recovery_score=recovery_score)
 
+@app.route('/gallery')
+def gallery():
+    try:
+        # List all objects in the bucket
+        all_objects = object_storage_client.list(BUCKET_NAME)
+        
+        # Filter for image files (assuming all are .png)
+        image_files = [obj for obj in all_objects if obj.startswith("health_art_") and obj.endswith(".png")]
+        
+        # Generate URLs for the frontend to access the images
+        image_urls = [f"/static/gallery/{image}" for image in image_files]
+        
+        return render_template('gallery.html', images=image_urls)
+    except Exception as e:
+        logging.error(f"Error fetching gallery: {str(e)}")
+        return jsonify({"error": f"Failed to fetch gallery: {str(e)}"}), 500
+
 @app.route('/generate_art', methods=['POST'])
 def generate_art():
-    """
-    Generates AI art based on the user's recovery score.
-
-    Fetches the latest recovery data, generates AI art, and returns the image data.
-
-    Returns:
-        JSON Response: Contains the base64-encoded image data or an error message.
-    """
     whoop = get_whoop_session()
     if not whoop:
-        return jsonify({"error": "Unauthorized"}), 401  # Unauthorized if session is missing
+        return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        # Fetch recovery data from WHOOP API
         recovery_resp = whoop.get(f"{API_BASE_URL}/v1/recovery")
         recovery_resp.raise_for_status()
         recovery_data = recovery_resp.json()
-        logging.debug(f"Recovery data: {recovery_data}")
+        recovery_score = int(recovery_data['records'][0]['score']['recovery_score'])
     except Exception as e:
         logging.error(f"Error fetching recovery data: {str(e)}")
         return jsonify({"error": "Failed to fetch recovery data"}), 500
 
-    try:
-        # Extract the recovery score from the response and cast to integer
-        recovery_score = int(recovery_data['records'][0]['score']['recovery_score'])
-        logging.debug(f"Recovery Score: {recovery_score}")
-    except (KeyError, IndexError, ValueError) as e:
-        logging.error(f"Error extracting recovery score: {str(e)}")
-        return jsonify({"error": "Failed to extract recovery score"}), 500
-
-    # Uncomment the following lines to simulate processing time during development
-    # time.sleep(15)
-
-    # Generate AI art based on the recovery score
     art_base64 = generate_ai_art(recovery_score)
-
     if art_base64 is None:
-        logging.error("Failed to generate AI art.")
         return jsonify({"error": "Failed to generate AI art"}), 500
 
-    # Return the base64-encoded image data as a JSON response
-    return jsonify({"image_data": art_base64})
+    try:
+        image_filename = f"health_art_{uuid.uuid4()}.png"
+        image_bytes = base64.b64decode(art_base64)
+        
+        # Save to Replit's Object Storage
+        object_storage_client.upload_from_bytes(f"{BUCKET_NAME}/{image_filename}", image_bytes)
+        
+        image_url = f"/static/gallery/{image_filename}"
+    except Exception as e:
+        logging.error(f"Error saving image to storage: {str(e)}")
+        return jsonify({"error": "Failed to save generated image"}), 500
+
+    return jsonify({
+        "image_data": art_base64,
+        "image_url": image_url
+    })
 
 UPLOAD_FOLDER = 'static/gallery'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
@@ -286,61 +304,68 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/save_image', methods=['POST'])
 def save_image():
     if 'file' not in request.files:
+        logging.warning("No file part in the request")
         return jsonify({"error": "No file part"}), 400
     file = request.files['file']
     recovery_score = request.form.get('recovery_score')
-    print(f"Recovery score received: {recovery_score}")  # Debug print
+    logging.debug(f"Recovery score received: {recovery_score}")
     if file.filename == '':
+        logging.warning("No selected file")
         return jsonify({"error": "No selected file"}), 400
     if file and allowed_file(file.filename):
         filename = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{recovery_score}.png")
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(file_path)
-        
-        # Save metadata to Replit db
-        metadata = {
-            'filename': filename,
-            'recovery_score': recovery_score,
-            'timestamp': datetime.now().isoformat()
-        }
-        db[filename] = json.dumps(metadata)
-        
-        print(f"Metadata saved: {metadata}")  # Debug print
-        return jsonify({"message": "File saved successfully", "metadata": metadata}), 200
+        try:
+            # Upload image to Object Storage
+            object_storage_client.upload_from_bytes(filename, file.read())
+            logging.debug(f"Uploaded image to Object Storage: {filename}")
+            
+            # Save metadata
+            metadata = {
+                'filename': filename,
+                'recovery_score': recovery_score,
+                'timestamp': datetime.now().isoformat()
+            }
+            metadata_filename = f"{filename}_metadata.json"
+            object_storage_client.upload_from_bytes(metadata_filename, json.dumps(metadata).encode())
+            logging.debug(f"Uploaded metadata to Object Storage: {metadata_filename}")
+            
+            return jsonify({"message": "File saved successfully", "metadata": metadata}), 200
+        except Exception as e:
+            logging.error(f"Error saving image and metadata: {e}")
+            return jsonify({"error": "Internal server error"}), 500
+    logging.warning("File type not allowed")
     return jsonify({"error": "File type not allowed"}), 400
-
-@app.route('/gallery')
-def gallery():
-    images = []
-    for key in db.keys():
-        if key.endswith('.png'):
-            metadata = json.loads(db[key])
-            print(f"Gallery metadata: {metadata}")  # Debug print
-            images.append(metadata)
-    images.sort(key=lambda x: x['timestamp'], reverse=True)
-    return render_template('gallery.html', images=images)
-
-@app.route('/image/<filename>')
-def image_detail(filename):
-    if filename in db:
-        image_data = json.loads(db[filename])
-        print(f"Image detail data: {image_data}")  # Debug print
-        return render_template('image_detail.html', image=image_data)
-    else:
-        abort(404)
 
 @app.route('/get_image/<filename>')
 def get_image(filename):
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    if os.path.exists(file_path):
-        return send_file(file_path, mimetype='image/png')
-    else:
+    try:
+        image = object_storage_client.download_as_bytes(filename)
+        logging.debug(f"Downloaded image from Object Storage: {filename}")
+        return send_file(
+            io.BytesIO(image),
+            mimetype='image/png',
+            as_attachment=False,
+            download_name=filename
+        )
+    except Exception as e:
+        logging.error(f"Error retrieving image {filename}: {e}")
+        abort(404)
+
+@app.route('/image/<filename>')
+def image_detail(filename):
+    try:
+        metadata_filename = f"{filename}_metadata.json"
+        metadata = json.loads(object_storage_client.download_as_bytes(metadata_filename).decode())
+        logging.debug(f"Fetched metadata for image {filename}")
+        return render_template('image_detail.html', image=metadata)
+    except Exception as e:
+        logging.error(f"Error retrieving image detail for {filename}: {e}")
         abort(404)
 
 @app.route('/favicon.ico')
@@ -371,22 +396,27 @@ def page_not_found(e):
 
 @app.errorhandler(Exception)
 def handle_exception(e):
-    """
-    Handles all unexpected exceptions.
-
-    Logs the error and returns a JSON response with the error message.
-
-    Args:
-        e (Exception): The exception that was raised.
-
-    Returns:
-        JSON Response: Error message with 500 status code.
-    """
     logging.error(f"An unexpected error occurred: {e}")
     return jsonify(error=str(e)), 500
 
 GALLERY_DIR = os.path.join(app.static_folder, 'gallery')
 os.makedirs(GALLERY_DIR, exist_ok=True)
 
+@app.route('/static/gallery/<path:filename>')
+def serve_image(filename):
+    try:
+        # Download the image from Replit's Object Storage
+        image_bytes = object_storage_client.download_as_bytes(f"{BUCKET_NAME}/{filename}")
+        
+        return send_file(
+            io.BytesIO(image_bytes),
+            mimetype='image/png',
+            as_attachment=False,
+            download_name=filename
+        )
+    except Exception as e:
+        logging.error(f"Error serving image {filename}: {str(e)}")
+        return "Image not found", 404
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=8080, debug=True)

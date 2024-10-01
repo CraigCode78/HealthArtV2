@@ -80,7 +80,8 @@
     </style>
     <meta property="og:title" content="HealthArt - Your Fitness Journey Visualised">
     <meta property="og:description" content="Check out my latest HealthArt! Recovery Score: {{ image.recovery_score }}%">
-    <meta property="og:image" content="{{ url_for('static', filename='gallery/' + image.filename, _external=True) }}">
+    <!-- Updated og:image to correctly reference the get_image route -->
+    <meta property="og:image" content="{{ url_for('get_image', filename=image.filename, _external=True) }}">
     <meta property="og:url" content="{{ url_for('image_detail', filename=image.filename, _external=True) }}">
     <meta property="og:type" content="website">
 </head>
@@ -92,7 +93,7 @@
     <div class="container">
         <h1>HealthArt Image Detail</h1>
         <div class="image-container">
-            <img src="{{ url_for('get_image', filename=image.filename) }}" alt="{{ image.filename }}">
+            <img src="{{ url_for('get_image', filename=image.filename) }}" alt="HealthArt">
             <div class="image-info">
                 <p><strong>Recovery Score:</strong> {{ image.recovery_score if image.recovery_score else 'N/A' }}%</p>
                 <p><strong>Date:</strong> {{ image.timestamp }}</p>

@@ -256,10 +256,8 @@
             <img src="{{ url_for('static', filename='images/healthart2.png') }}" alt="Additional Health Art">
         </section>
 
-        <!-- Add the gallery link here -->
-        <div class="gallery-link-section">
-            <a href="{{ url_for('gallery') }}" class="gallery-link">View Your HealthArt Gallery</a>
-        </div>
+        <!-- View Gallery Button -->
+        <button id="view-gallery-button" onclick="window.location.href='{{ url_for('gallery') }}'">View Your Health Art Gallery</button>
     </div>
 
     <!-- Footer Section -->
@@ -270,11 +268,6 @@
     <!-- Scripts -->
     <script>
         $(document).ready(function() {
-            /**
-             * Sends a POST request to generate AI art based on the recovery score.
-             * On success, displays the generated image and hides the loader.
-             * On failure, hides the loader and alerts the user.
-             */
             function generateArt() {
                 $.ajax({
                     url: "{{ url_for('generate_art') }}",
@@ -287,9 +280,8 @@
                             $('#health-art').addClass('show');  // Display the image
                             $('#loader').hide();  // Hide the loading spinner
                             $('#saveButton').show();  // Show the save button
-                            // Store the image data and recovery score
-                            $('#saveButton').data('imageData', response.image_data);
-                            $('#saveButton').data('recoveryScore', response.recovery_score);
+                            // Store the image URL for saving
+                            $('#saveButton').data('imageUrl', response.image_url);
                         } else {
                             $('#loader').hide();
                             alert('Failed to generate art.');
@@ -307,38 +299,14 @@
             generateArt();
 
             function saveImage() {
-                const img = document.getElementById('health-art');
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                canvas.getContext('2d').drawImage(img, 0, 0, img.width, img.height);
-                
-                const recoveryScore = $('#saveButton').data('recoveryScore');
-                console.log('Recovery Score before save:', recoveryScore); // Debug log
-                
-                canvas.toBlob(function(blob) {
-                    const formData = new FormData();
-                    formData.append('file', blob, 'generated_image.png');
-                    formData.append('recovery_score', recoveryScore);
-                    
-                    fetch('{{ url_for("save_image") }}', {
-                        method: 'POST',
-                        body: formData
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        console.log('Save response:', data); // Debug log
-                        if (data.message) {
-                            alert('Image saved successfully!');
-                        } else {
-                            alert('Error saving image: ' + data.error);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('An error occurred while saving the image.');
-                    });
-                }, 'image/png');
+                const imageUrl = $('#saveButton').data('imageUrl');
+                if (!imageUrl) {
+                    alert('No image to save. Please generate an image first.');
+                    return;
+                }
+
+                // The image is already saved on the server, so we just need to confirm
+                alert('Image saved successfully! You can view it in your gallery.');
             }
 
             $('#saveButton').click(function() {

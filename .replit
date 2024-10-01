@@ -20,3 +20,6 @@ externalPort = 80
 
 [env]
 REPLIT_PYTHON_PACKAGE_LAYER = "1"
+
+[objectStorage]
+defaultBucketID = "replit-objstore-2beb1307-ac65-40cb-b566-d34e8730dad7"
